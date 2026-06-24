@@ -1,0 +1,24 @@
+# --- Core libraries used across the whole project ---
+
+# Reads Excel files cell-by-cell (handles messy, non-standard headers)
+openpyxl==3.1.2
+
+# DataFrame library used for intermediate data handling
+pandas==2.2.2
+
+# Embedded analytical SQL engine - queries Parquet files directly from MinIO
+duckdb==1.0.0
+
+# S3-compatible client used to talk to MinIO
+boto3==1.34.131
+
+# Dashboard framework
+streamlit==1.36.0
+
+# Plotting library used inside the dashboard
+plotly==5.22.0
+
+# Needed by DuckDB's httpfs extension setup and general HTTP calls
+requests==2.32.3
+
+seaborn

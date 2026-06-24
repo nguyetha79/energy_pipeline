@@ -1,0 +1,12 @@
+
+FROM apache/airflow:2.9.2-python3.11
+
+# Switch to the 'airflow' user (required - the base image expects
+# pip installs to happen as this user, not root)
+USER airflow
+
+# Copy our requirements file into the image
+COPY requirements.txt /requirements.txt
+
+# Install the extra Python packages
+RUN pip install --no-cache-dir -r /requirements.txt

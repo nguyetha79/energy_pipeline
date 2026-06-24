@@ -1,0 +1,188 @@
+"""
+transform_clean.py
+====================
+STAGE 2 of the pipeline: CLEAN ZONE.
+
+WHAT THIS SCRIPT DOES:
+  1. Reads all raw Parquet files (one per station/sheet) from the
+     'raw' bucket using DuckDB.
+  2. Renames columns into the unified schema described in the plan:
+       hall_id, station_id, timestamp, wert, min, max, avg, src_file
+  3. Converts the "Zeitbereich" timestamp column into a real UTC
+     timestamp.
+  4. Handles missing values by keeping rows with a valid timestamp,
+     and replacing missing metric values (wert/min/max/avg) with 0.
+  6. Writes ONE combined Parquet file per hall into the 'clean' bucket,
+     partitioned by hall_id.
+
+WHY DuckDB?
+  DuckDB can run SQL directly against Parquet files stored in MinIO
+  (via the httpfs extension) without needing a separate database
+  server. This keeps the architecture simple.
+"""
+
+import os
+import io
+import duckdb
+import pandas as pd
+
+from minio_utils import (
+    get_s3_client,
+    ensure_bucket_exists,
+    upload_bytes,
+    list_objects,
+    download_bytes,
+    get_duckdb_s3_setup_sql,
+)
+
+BRONZE_BUCKET = os.environ.get("BUCKET_BRONZE", "bronze")
+SILVER_BUCKET = os.environ.get("BUCKET_SILVER", "silver")
+
+def normalize_hall_dataframe(df):
+    """
+    Take a raw DataFrame from the bronze layer and return
+    a normalized DataFrame matching the unified schema:
+
+        hall_id, hall_name, meter_id, station_id, station_name, station_desc,
+        timestamp (UTC), wert, min, max, avg, src_file
+
+    Steps performed:
+      - Rename 'Wert' / 'MIN' / 'MAX' / 'MAX (AVG)' columns to the
+        unified lowercase names.
+      - Parse the 'Zeitbereich' (date) column into a proper datetime
+        and treat it as UTC (the source files do not include timezone
+        info, so we assume the local export time represents UTC for
+        this academic project; in a real company setting you would
+        confirm the actual timezone with the source system).
+      - Keep rows with a valid timestamp.
+      - Preserve meter_id and station_desc if present.
+      - Replace missing 'wert'/'min'/'max'/'avg' values with 0.
+    """
+    df = df.copy()
+
+    '''
+    # --- 1) Ensure station metadata exists without requiring a merge file ---
+    if "station_id" not in df.columns and "raw_sheet_name" in df.columns:
+        df["station_id"] = df["raw_sheet_name"]
+    if "station_name" not in df.columns:
+        df["station_name"] = df.get("station_label", df.get("raw_sheet_name", "unknown_station"))
+    '''
+    
+    # --- 2) Rename measurement columns to the unified schema ---
+    # The exact column names can vary slightly between files, so we
+    # search for the right column rather than assuming a fixed name.
+    rename_map = {}
+    for col in df.columns:
+        col_clean = str(col).strip().lower()
+        if col_clean == "wert":
+            rename_map[col] = "wert"
+        elif col_clean == "min":
+            rename_map[col] = "min"
+        elif col_clean == "max":
+            rename_map[col] = "max"
+        elif col_clean in ("max (avg)", "avg", "max(avg)"):
+            rename_map[col] = "avg"
+        elif col_clean in ("zeitbereich", "timestamp", "timestamp_raw", "datetime", "date"):
+            rename_map[col] = "timestamp_raw"
+
+    df = df.rename(columns=rename_map)
+
+    if "timestamp_raw" not in df.columns:
+        timestamp_candidates = [
+            col for col in df.columns
+            if any(token in str(col).strip().lower() for token in ("zeit", "time", "date", "timestamp"))
+        ]
+        if timestamp_candidates:
+            df = df.rename(columns={timestamp_candidates[0]: "timestamp_raw"})
+        else:
+            df["timestamp_raw"] = pd.NaT
+
+    # --- 3) Parse timestamp into UTC ---
+    # dayfirst=True because the source format is DD.MM.YYYY (German format)
+    df["timestamp"] = pd.to_datetime(df["timestamp_raw"], dayfirst=True, errors="coerce", utc=True)
+
+    # --- 4) Make sure numeric columns are actually numeric ---
+    for col in ["wert", "min", "max", "avg"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        else:
+            df[col] = pd.NA
+
+    # --- 5) Keep rows with a valid timestamp, fill missing metrics with 0 ---
+    before = len(df)
+    df = df[df["timestamp"].notna()].copy()
+    for col in ["wert", "min", "max", "avg"]:
+        df[col] = df[col].fillna(0)
+    after = len(df)
+    if before != after:
+        print(f"  Dropped {before - after} rows with missing timestamp")
+
+    # --- 6) Keep only the unified columns ---
+    final_cols = [
+        "hall_id", "hall_label", "meter_id", "station_id",
+        "station_name", "station_desc",
+        "timestamp", "wert", "min", "max", "avg",
+        "interval_minutes", "src_file",
+    ]
+    for col in final_cols:
+        if col not in df.columns:
+            df[col] = pd.NA
+
+    return df[final_cols]
+
+
+def run(**context):
+    """
+    Main entry point, called by the Airflow PythonOperator.
+
+    For each hall (hall_id), combine all of its raw station Parquet
+    files into a single normalized Parquet file in the 'clean' bucket.
+    """
+    s3_client = get_s3_client()
+    ensure_bucket_exists(s3_client, BRONZE_BUCKET)
+    ensure_bucket_exists(s3_client, SILVER_BUCKET)
+
+    raw_keys = list_objects(s3_client, BRONZE_BUCKET)
+    parquet_keys = [k for k in raw_keys if k.endswith(".parquet")]
+
+    if not parquet_keys:
+        print("No bronze Parquet files found - nothing to clean.")
+        return []
+
+    # Group parquet keys by hall_id (the folder prefix, e.g. 'H1/...')
+    halls = {}
+    for key in parquet_keys:
+        hall_id = key.split("/")[0]
+        halls.setdefault(hall_id, []).append(key)
+
+    written_keys = []
+
+    for hall_id, keys in halls.items():
+        print(f"Cleaning hall {hall_id} ({len(keys)} station files)...")
+
+        frames = []
+        for key in keys:
+            raw_bytes = download_bytes(s3_client, BRONZE_BUCKET, key)
+            df = pd.read_parquet(io.BytesIO(raw_bytes))
+            normalized = normalize_hall_dataframe(df)
+            frames.append(normalized)
+
+        hall_df = pd.concat(frames, ignore_index=True)
+
+        # Write the cleaned hall data as one Parquet file
+        buffer = io.BytesIO()
+        hall_df.to_parquet(buffer, index=False)
+        buffer.seek(0)
+
+        clean_key = f"{hall_id}/data.parquet"
+        upload_bytes(s3_client, SILVER_BUCKET, clean_key, buffer.read())
+        written_keys.append(clean_key)
+
+        print(f"  -> {clean_key} ({len(hall_df)} rows)")
+
+    print(f"Done. {len(written_keys)} clean files written.")
+    return written_keys
+
+
+if __name__ == "__main__":
+    run()
