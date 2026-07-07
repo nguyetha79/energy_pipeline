@@ -1,4 +1,7 @@
 '''
+STREAMLIT DASHBOARD
+ 
+WHAT THIS APP DOES:
   - Connects to MinIO via DuckDB (no separate database needed).
   - Reads the GOLD ZONE Parquet files (aggregated, dashboard-ready data).
   - Lets the user:
@@ -37,7 +40,9 @@ from charts import (
 HALLS       = ["H1", "H2", "H3", "H4", "H5", "H6", "H7", "H8"]
 GRANULARITY = {"15 min": "minute", "Hour": "hour", "Day": "day"}
 
-st.set_page_config(page_title="Energy Dashboard", page_icon="assets/favicon.jpg", layout="wide")
+ROOT = Path(__file__).resolve().parent.parent
+
+st.set_page_config(page_title="Energy Dashboard", page_icon=str(ROOT / "assets" / "favicon.jpg"), layout="wide")
 
 def load_css(path):
     with open(path) as f:
@@ -47,7 +52,7 @@ load_css(Path(__file__).parent / "style.css")
 
 # Sidebar 
 with st.sidebar:
-    st.image(str(Path(__file__).parent / "assets" / "arnold-logo.png"), width=220)
+    st.image(str((ROOT / "assets" / "arnold-logo.png")), width=220)
     st.markdown('<div class="section-title">Global Filters</div>', unsafe_allow_html=True)
 
     date_range = st.date_input(

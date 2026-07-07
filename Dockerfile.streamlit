@@ -7,7 +7,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY dashboard/ /app/dashboard/
-COPY dashboard/assets/ /app/dashboard/assets/
+COPY assets/ /app/assets/
 COPY dashboard/style.css /app/dashboard/style.css
 
 # Copy scripts so the dashboard can import minio_utils

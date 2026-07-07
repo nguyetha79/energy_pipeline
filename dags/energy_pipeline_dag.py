@@ -29,11 +29,7 @@ from pathlib import Path
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-
-try:
-    from airflow.providers.standard.sensors.filesystem import FileSensor
-except ImportError:
-    from airflow.sensors.filesystem import FileSensor
+from airflow.sensors.filesystem import FileSensor
 
 # Make sure the 'scripts' folder is importable
 sys.path.append("/opt/airflow/scripts")

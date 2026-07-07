@@ -53,6 +53,8 @@ Then open the following services:
 4. `scripts/derive_data.py` builds analytics-ready gold tables from the silver layer.
 5. `scripts/notify.py` writes a run success/failure log and helps alert on failures.
 
+![pipeline](assets/pipeline.jpg)
+
 ## Dashboard
 
 The dashboard is implemented in `dashboard/app.py` and uses:
