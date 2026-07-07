@@ -1,17 +1,23 @@
 FROM python:3.11-slim
 
-# Set the working directory inside the container
 WORKDIR /app
 
-# Copy and install Python dependencies first (for better Docker layer caching)
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# Copy and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the dashboard source code
 COPY dashboard/ /app/dashboard/
+COPY dashboard/assets/ /app/dashboard/assets/
+COPY dashboard/style.css /app/dashboard/style.css
 
-# Streamlit's default port
+# Copy scripts so the dashboard can import minio_utils
+COPY scripts/ /app/scripts/
+
+# Set PYTHONPATH so python can find modules in /app
+ENV PYTHONPATH=/app
+
+# Expose the port Streamlit runs on
 EXPOSE 8501
 
-# Run the dashboard
-CMD ["streamlit", "run", "dashboard/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Run streamlit pointing to the absolute path inside the container
+CMD ["streamlit", "run", "/app/dashboard/app.py", "--server.port=8501", "--server.address=0.0.0.0"]

@@ -41,23 +41,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # One-off container that creates the bronze/silver/gold buckets
-  # using the MinIO Client (mc), then exits.
-  minio-init:
-    image: minio/mc:latest
-    container_name: minio-init
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} &&
-      mc mb -p local/${BUCKET_BRONZE} &&
-      mc mb -p local/${BUCKET_SILVER} &&
-      mc mb -p local/${BUCKET_GOLD} &&
-      echo 'Buckets created successfully.'
-      "
-
   # Postgres: metadata database required by Airflow
   postgres:
     image: postgres:15
@@ -73,29 +56,6 @@ services:
       interval: 5s
       retries: 5
 
-  # One-off container that initializes the Airflow database
-  # and creates the admin user, then exits.
-  airflow-init:
-    build:
-      context: .
-      dockerfile: Dockerfile.airflow
-    container_name: airflow-init
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-    entrypoint:
-      - /bin/bash
-      - -c
-      - airflow db migrate && airflow users create --username ${AIRFLOW_ADMIN_USER} --password ${AIRFLOW_ADMIN_PASSWORD} --firstname Admin --lastname User --role Admin --email admin@example.com
-    volumes:
-      - ./dags:/opt/airflow/dags
-      - ./scripts:/opt/airflow/scripts
-      - ./data:/opt/airflow/data
-
   # Airflow Webserver: the UI at http://localhost:8080
   airflow-webserver:
     build:
@@ -103,10 +63,10 @@ services:
       dockerfile: Dockerfile.airflow
     container_name: airflow-webserver
     depends_on:
-      airflow-init:
-        condition: service_completed_successfully
-      minio-init:
-        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
@@ -135,10 +95,10 @@ services:
       dockerfile: Dockerfile.airflow
     container_name: airflow-scheduler
     depends_on:
-      airflow-init:
-        condition: service_completed_successfully
-      minio-init:
-        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
@@ -165,6 +125,7 @@ services:
     depends_on:
       - minio
     environment:
+      PYTHONPATH: /app
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}

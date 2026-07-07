@@ -9,7 +9,7 @@
     - dim_station
     - dim_meter
 
-  5. Writes the results as Parquet files into the 'gold' bucket,
+  3. Writes the results as Parquet files into the 'gold' bucket,
      ready for the Streamlit dashboard.
 """
 
@@ -72,7 +72,6 @@ def run(**context):
             meter_id,
             station_id,
             timestamp,
-            wert,
             min,
             max,
             avg

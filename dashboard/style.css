@@ -1,0 +1,210 @@
+@import url('https://fonts.googleapis.com/css2?family=Hind:wght@200;300;400;600&display=swap');
+
+:root {
+    /* Colors */
+    --deep-navy:           #004c8a;
+    --pale-cyan-tint:      #edf8fe;
+    --white:               #ffffff;
+    --body-text:           #212529;
+    --brand-cyan:          #008fca;
+    --bright-cyan-accent:  #00b9ee;
+    --dark-charcoal:       #454545;
+    --light-gray:          #868786;
+    --mid-gray:            #898989;
+    --silver-border:       #b1b2b3;
+
+    /* Semantic roles */
+    --bg-main:      var(--white);
+    --bg-sidebar:   var(--pale-cyan-tint);
+    --bg-card:      var(--white);
+    --bg-hero:      var(--deep-navy);
+    --border:       var(--silver-border);
+    --text-primary: var(--body-text);
+    --text-muted:   var(--light-gray);
+    --accent:       var(--brand-cyan);
+    --accent-hover: var(--bright-cyan-accent);
+    --danger:       #c0392b;
+
+    /* Spacing (9px base grid) */
+    --space-xs:     5px;
+    --space-sm:     9px;
+    --space-md-sm:  10px;
+    --space-md:     15px;
+    --space-md-lg:  18px;
+    --space-lg:     20px;
+    --space-xl:     32px;
+    --space-2xl:    36px;
+    --space-3xl:    54px;
+    --space-section:90px;
+
+    /* Radius */
+    --radius-pill:        50px;
+    --radius-panel-left:  20px 0px 0px 20px;
+}
+
+/* Base */
+.stApp {
+    background-color: var(--bg-main);
+    font-family: 'Hind', Arial, Helvetica, sans-serif, Verdana, "Trebuchet MS";
+}
+
+section[data-testid="stSidebar"] {
+    background-color: var(--bg-sidebar);
+}
+
+/* Typography */
+body, p, span, div {
+    font-family: 'Hind', Arial, Helvetica, sans-serif, Verdana, "Trebuchet MS";
+    color: var(--text-primary);
+}
+
+/* page-title token */
+h1 {
+    color: var(--bright-cyan-accent) !important;
+    font-family: 'Hind', sans-serif;
+    font-size: clamp(20px, 2.4vw, 24.3px) !important;
+    font-weight: 600 !important;
+    line-height: 23.76px;
+}
+
+/* subheading-semibold token */
+h2 {
+    color: var(--deep-navy) !important;
+    font-family: 'Hind', sans-serif;
+    font-size: clamp(17px, 2vw, 19.8px) !important;
+    font-weight: 600 !important;
+    line-height: 29.7px;
+}
+
+/* label-semibold token */
+h3 {
+    color: var(--dark-charcoal) !important;
+    font-family: 'Hind', sans-serif;
+    font-size: clamp(14px, 1.6vw, 16.2px) !important;
+    font-weight: 600 !important;
+    line-height: 24.3px;
+}
+
+/* body-regular token */
+p {
+    font-size: 18px;
+    font-weight: 400;
+    line-height: 27px;
+}
+
+/* Metric card */
+.metric-card {
+    background:    var(--bg-card);
+    border:        1px solid var(--border);
+    border-left:   4px solid var(--brand-cyan);
+    border-radius: 8px;
+    padding:       var(--space-lg) var(--space-xl);
+    margin-bottom: var(--space-sm);
+    width: 100%;
+    box-sizing: border-box;
+    box-shadow: 0px 0px 6px 1px rgba(0, 0, 0, 0.08);
+}
+
+.metric-card h3 {
+    color:          var(--text-muted) !important;
+    font-size:      clamp(10px, 1.2vw, 14.4px) !important;
+    font-weight:    400 !important;
+    margin:         0 0 var(--space-xs) 0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    line-height:    21.6px;
+}
+
+.metric-card p {
+    color:       var(--deep-navy);
+    font-size:   clamp(20px, 2.5vw, 28px);
+    font-weight: 600;
+    margin:      0;
+    word-break:  break-word;
+}
+
+
+/* ── Section title ───────────────────────────────────────────── */
+.section-title {
+    color:          var(--brand-cyan);
+    font-size:      14.4px;
+    font-weight:    600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin:         var(--space-xl) 0 var(--space-sm) 0;
+    padding-bottom: var(--space-xs);
+    border-bottom:  1px solid var(--border);
+}
+
+/* Sidebar labels (nav-link / label-semibold tokens) */
+.stSelectbox label,
+.stMultiSelect label,
+.stDateInput label,
+.stSlider label {
+    color:       var(--dark-charcoal) !important;
+    font-size:   14.4px !important;
+    font-weight: 600 !important;
+}
+
+.stRadio label {
+    color: var(--body-text) !important;
+}
+
+/* Buttons / interactive accents */
+.stButton button {
+    border-radius: var(--radius-pill) !important;
+    border: 1px solid var(--brand-cyan) !important;
+    color: var(--brand-cyan) !important;
+    background: var(--white) !important;
+}
+
+.stButton button:hover {
+    color: var(--bright-cyan-accent) !important;
+    border-color: var(--bright-cyan-accent) !important;
+}
+
+/* Multiselect tags (hall chips) — match the pill button style */
+span[data-baseweb="tag"] {
+    background-color: var(--white) !important;
+    border: 1px solid var(--brand-cyan) !important;
+    border-radius: var(--radius-pill) !important;
+}
+
+span[data-baseweb="tag"] span {
+    color: var(--brand-cyan) !important;
+}
+
+/* the small "x" remove icon inside each tag */
+span[data-baseweb="tag"] svg {
+    fill: var(--brand-cyan) !important;
+}
+
+/* Responsive (per design system breakpoints) 
+   mobile: <=576px | tablet: 768-1120px | desktop: 1100-1980px | wide: >=2000px */
+
+/* Mobile */
+@media (max-width: 575.98px) {
+    .metric-card { padding: var(--space-md) var(--space-md-lg); }
+    .metric-card p { font-size: 18px; }
+    h1 { font-size: 18px !important; }
+    h2 { font-size: 16px !important; }
+    h3 { font-size: 14px !important; }
+    [data-testid="column"] { min-width: 120px; }
+}
+
+/* Tablet */
+@media (min-width: 768px) and (max-width: 1120px) {
+    .metric-card { padding: var(--space-lg); }
+    [data-testid="column"] { min-width: 160px; }
+}
+
+/* Desktop */
+@media (min-width: 1100px) and (max-width: 1980px) {
+    .metric-card { padding: var(--space-lg) var(--space-xl); }
+}
+
+/* Wide */
+@media (min-width: 2000px) {
+    .metric-card { padding: var(--space-xl) var(--space-2xl); }
+    .metric-card p { font-size: 32px; }
+}

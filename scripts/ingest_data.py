@@ -51,11 +51,6 @@ BRONZE_BUCKET = os.environ.get("BUCKET_BRONZE") or "bronze"
 def extract_sheet_metadata(worksheet):
     sheet_name = worksheet.title
 
-    # Read exact metadata cells first.
-    # meter_id = worksheet["A2"].value
-    # station_name = worksheet["B2"].value
-    # station_desc = worksheet["C2"].value
-
     # Fallback parsing from row 2/3 if the cells are blank.
     row2_values = [cell.value for cell in worksheet[2]]
     meter_id = str(int(row2_values[0])) if isinstance(row2_values[0], (int, float)) else None
@@ -188,12 +183,14 @@ def process_excel_file(local_file_path, hall_id, hall_label, s3_client):
 
     parquet_keys = []
 
-    for station_index, worksheet in enumerate(workbook.worksheets, start=1):
-        station_id = f"station_{station_index:02d}"
+    for worksheet in workbook.worksheets:
         if hall_id == "H1":
             worksheet.delete_cols(1)
 
         meta = extract_sheet_metadata(worksheet)
+        safe_sheet_name = re.sub(r"[^A-Za-z0-9_]+", "_", meta["sheet_name"]).strip("_")
+        station_id = f"{hall_id}_{safe_sheet_name}".lower()
+
         df = worksheet_to_dataframe(worksheet, meta["header_row_index"])
         df = normalize_dataframe(df)
 

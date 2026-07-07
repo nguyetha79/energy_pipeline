@@ -1,18 +1,13 @@
 """
-transform_clean.py
-====================
-STAGE 2 of the pipeline: CLEAN ZONE.
-
-WHAT THIS SCRIPT DOES:
   1. Reads all raw Parquet files (one per station/sheet) from the
      'raw' bucket using DuckDB.
   2. Renames columns into the unified schema described in the plan:
-       hall_id, station_id, timestamp, wert, min, max, avg, src_file
+       hall_id, station_id, timestamp, min, max, avg, src_file
   3. Converts the "Zeitbereich" timestamp column into a real UTC
      timestamp.
   4. Handles missing values by keeping rows with a valid timestamp,
-     and replacing missing metric values (wert/min/max/avg) with 0.
-  6. Writes ONE combined Parquet file per hall into the 'clean' bucket,
+     and replacing missing metric values (min/max/avg) with 0.
+  5. Writes ONE combined Parquet file per hall into the 'clean' bucket,
      partitioned by hall_id.
 
 WHY DuckDB?
@@ -44,10 +39,10 @@ def normalize_hall_dataframe(df):
     a normalized DataFrame matching the unified schema:
 
         hall_id, hall_name, meter_id, station_id, station_name, station_desc,
-        timestamp (UTC), wert, min, max, avg, src_file
+        timestamp (UTC), min, max, avg, src_file
 
     Steps performed:
-      - Rename 'Wert' / 'MIN' / 'MAX' / 'MAX (AVG)' columns to the
+      - Rename 'MIN' / 'MAX' / 'MAX (AVG)' columns to the
         unified lowercase names.
       - Parse the 'Zeitbereich' (date) column into a proper datetime
         and treat it as UTC (the source files do not include timezone
@@ -56,27 +51,17 @@ def normalize_hall_dataframe(df):
         confirm the actual timezone with the source system).
       - Keep rows with a valid timestamp.
       - Preserve meter_id and station_desc if present.
-      - Replace missing 'wert'/'min'/'max'/'avg' values with 0.
+      - Replace missing 'min'/'max'/'avg' values with 0.
     """
     df = df.copy()
-
-    '''
-    # --- 1) Ensure station metadata exists without requiring a merge file ---
-    if "station_id" not in df.columns and "raw_sheet_name" in df.columns:
-        df["station_id"] = df["raw_sheet_name"]
-    if "station_name" not in df.columns:
-        df["station_name"] = df.get("station_label", df.get("raw_sheet_name", "unknown_station"))
-    '''
     
-    # --- 2) Rename measurement columns to the unified schema ---
+    # Rename measurement columns to the unified schema
     # The exact column names can vary slightly between files, so we
     # search for the right column rather than assuming a fixed name.
     rename_map = {}
     for col in df.columns:
         col_clean = str(col).strip().lower()
-        if col_clean == "wert":
-            rename_map[col] = "wert"
-        elif col_clean == "min":
+        if col_clean == "min":
             rename_map[col] = "min"
         elif col_clean == "max":
             rename_map[col] = "max"
@@ -97,31 +82,31 @@ def normalize_hall_dataframe(df):
         else:
             df["timestamp_raw"] = pd.NaT
 
-    # --- 3) Parse timestamp into UTC ---
+    # Parse timestamp into UTC 
     # dayfirst=True because the source format is DD.MM.YYYY (German format)
     df["timestamp"] = pd.to_datetime(df["timestamp_raw"], dayfirst=True, errors="coerce", utc=True)
 
-    # --- 4) Make sure numeric columns are actually numeric ---
-    for col in ["wert", "min", "max", "avg"]:
+    # Make sure numeric columns are actually numeric 
+    for col in ["min", "max", "avg"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
         else:
             df[col] = pd.NA
 
-    # --- 5) Keep rows with a valid timestamp, fill missing metrics with 0 ---
+    # Keep rows with a valid timestamp, fill missing metrics with 0 
     before = len(df)
     df = df[df["timestamp"].notna()].copy()
-    for col in ["wert", "min", "max", "avg"]:
+    for col in ["min", "max", "avg"]:
         df[col] = df[col].fillna(0)
     after = len(df)
     if before != after:
         print(f"  Dropped {before - after} rows with missing timestamp")
 
-    # --- 6) Keep only the unified columns ---
+    # Keep only the unified columns 
     final_cols = [
         "hall_id", "hall_label", "meter_id", "station_id",
         "station_name", "station_desc",
-        "timestamp", "wert", "min", "max", "avg",
+        "timestamp", "min", "max", "avg",
         "interval_minutes", "src_file",
     ]
     for col in final_cols:
