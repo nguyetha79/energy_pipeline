@@ -1,9 +1,7 @@
 # This file defines ALL the services needed to run the full pipeline:
 #
 #   - minio            : S3-compatible object storage (BRONZE/SILVER/gold buckets)
-#   - minio-init       : one-off helper that creates the buckets on startup
 #   - postgres         : database used internally by Airflow to store metadata
-#   - airflow-init     : one-off helper that initializes the Airflow database
 #   - airflow-webserver: Airflow UI (http://localhost:8080)
 #   - airflow-scheduler: runs the DAG / triggers tasks
 #   - streamlit        : the dashboard (http://localhost:8501)
