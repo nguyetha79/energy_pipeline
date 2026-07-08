@@ -16,6 +16,8 @@ The pipeline is orchestrated with Apache Airflow, uses MinIO for object storage,
 - `Airflow` runs the `energy_pipeline_dag` to execute ingestion, transformation, aggregation, and notification.
 - `Streamlit` serves a dashboard that reads the gold layer from MinIO.
 
+![pipeline](assets/pipeline.jpg)
+
 ## Key Features
 
 - Detects newly uploaded `.xlsx` files in `data/input`
@@ -41,7 +43,7 @@ docker compose up -d --build
 
 Then open the following services:
 
-- Airflow Web UI: `http://localhost:8080` (login `admin` / `admin`)
+- Airflow Web UI: `http://localhost:8080`
 - MinIO Console: `http://localhost:9001`
 - Streamlit Dashboard: `http://localhost:8501`
 
@@ -52,8 +54,6 @@ Then open the following services:
 3. `scripts/clean_data.py` normalizes raw station Parquet files and writes cleaned output to silver.
 4. `scripts/derive_data.py` builds analytics-ready gold tables from the silver layer.
 5. `scripts/notify.py` writes a run success/failure log and helps alert on failures.
-
-![pipeline](assets/pipeline.jpg)
 
 ## Dashboard
 
