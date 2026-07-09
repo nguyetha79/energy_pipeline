@@ -54,6 +54,37 @@ services:
       interval: 5s
       retries: 5
 
+  # One-off container that initializes the Airflow database
+  # and creates the admin user, then exits.
+  airflow-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: airflow-init
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    entrypoint: >
+      /bin/bash -c "
+      airflow db migrate &&
+      airflow users create
+        --username ${AIRFLOW_ADMIN_USER}
+        --password ${AIRFLOW_ADMIN_PASSWORD}
+        --firstname Admin
+        --lastname User
+        --role Admin
+        --email admin@example.com
+      "
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./config:/opt/airflow/config
+      - ./data:/opt/airflow/data
+
   # Airflow Webserver: the UI at http://localhost:8080
   airflow-webserver:
     build:
