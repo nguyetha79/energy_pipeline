@@ -99,6 +99,7 @@ def run(**context):
     con.execute("""
         CREATE OR REPLACE TABLE dim_meter AS
         SELECT DISTINCT
+            station_id,    
             meter_id,
             interval_minutes
         FROM total_energy_data

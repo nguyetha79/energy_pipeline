@@ -133,13 +133,14 @@ def query_station_drilldown(station_id: str, peak_start: str, peak_end: str) -> 
     sql = """
         SELECT
             DATE_TRUNC('minute', f.timestamp) AS timestamp,
-            AVG(f.avg)  AS consumption,
+            f.meter_id,
+            AVG(f.avg)   AS consumption,
             MAX(f."max") AS peak_max
         FROM fact_measurement f
-        WHERE f.station_id= ?
+        WHERE f.station_id = ?
           AND f.avg > 0
           AND f.timestamp BETWEEN ? AND ?
-        GROUP BY DATE_TRUNC('minute', f.timestamp)
+        GROUP BY DATE_TRUNC('minute', f.timestamp), f.meter_id
         ORDER BY timestamp
     """
     df = get_con().execute(sql, [station_id, peak_start, peak_end]).df()

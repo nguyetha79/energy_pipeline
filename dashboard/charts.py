@@ -3,7 +3,7 @@ import plotly.graph_objects as go
 import pandas as pd
 
 # ARNOLD Corporate Blue 
-DEEP_NAVY          = "#004c8a"
+DEEP_NAVY           = "#004c8a"
 PALE_CYAN_TINT      = "#edf8fe"
 WHITE               = "#ffffff"
 BODY_TEXT           = "#212529"
@@ -148,7 +148,7 @@ def fig_station_drilldown(df: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
 
     for i, (station, sub) in enumerate(df.groupby("station_name")):
-        sub = sub.sort_values("timestamp")
+        sub   = sub.sort_values("timestamp")
         color = BRAND_QUALITATIVE[i % len(BRAND_QUALITATIVE)]
 
         fig.add_trace(go.Scatter(
@@ -156,23 +156,31 @@ def fig_station_drilldown(df: pd.DataFrame) -> go.Figure:
             name=station,
             mode="lines",
             line=dict(color=color, width=1.5),
-            # fill="tozeroy",
-            # fillcolor=_hex_to_rgba(color, 0.12),
         ))
 
-        # mark this station's peak point
+        # Peak marker with rich tooltip
         peak_idx = sub["consumption"].idxmax()
         peak_row = sub.loc[peak_idx]
 
+        meter_id = peak_row.get("meter_id", "—")  # graceful fallback
+
         fig.add_trace(go.Scatter(
-            x=[peak_row["timestamp"]], y=[peak_row["consumption"]],
-            mode="markers+text",
+            x=[peak_row["timestamp"]],
+            y=[peak_row["consumption"]],
+            mode="markers",
             name=f"{station} peak",
             marker=dict(color=DANGER, size=10, symbol="diamond",
-                       line=dict(color="white", width=1)),
-            text=[f"{peak_row['consumption']:.1f}"],
-            textposition="top center",
-            textfont=dict(color=DANGER, size=10),
+                        line=dict(color="white", width=1)),
+            
+            customdata=[[peak_row["consumption"], station, meter_id]],
+            hovertemplate=(
+                "<b>⚡ Peak</b><br>"
+                "Value:   <b>%{customdata[0]:.1f} kWh</b><br>"
+                "Station: <b>%{customdata[1]}</b><br>"
+                "Meter:   <b>%{customdata[2]}</b><br>"
+                "Time:    %{x|%d.%m.%Y %H:%M}"
+                "<extra></extra>"   # hides the trace name box
+            ),
             showlegend=False,
         ))
 
@@ -182,6 +190,11 @@ def fig_station_drilldown(df: pd.DataFrame) -> go.Figure:
         legend=dict(orientation="h", y=-0.2),
         xaxis=dict(**GRID, title="Time"),
         yaxis=dict(**GRID, title="Consumption (kWh)"),
+        hoverlabel=dict(
+            bgcolor=WHITE,
+            bordercolor=SILVER_BORDER,
+            font=dict(family="Hind, Arial, sans-serif", color=BODY_TEXT, size=12),
+        ),
     )
     return fig
 

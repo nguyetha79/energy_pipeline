@@ -184,7 +184,7 @@ def process_excel_file(local_file_path, hall_id, hall_label, s3_client):
     parquet_keys = []
 
     for worksheet in workbook.worksheets:
-        if hall_id == "H1":
+        if hall_id == "H1" or hall_id == "H5":
             worksheet.delete_cols(1)
 
         meta = extract_sheet_metadata(worksheet)
