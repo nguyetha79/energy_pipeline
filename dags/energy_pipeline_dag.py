@@ -1,4 +1,4 @@
-"""
+'''"""
 AIRFLOW DAG that orchestrates the energy consumption pipeline:
 
     1. Detect newly uploaded files   -> FileSensor
@@ -123,4 +123,122 @@ with DAG(
     )
 
     # Define the order of execution (the "edges" of the DAG)
-    detect_new_files >> ingest_data_task >> clean_data_task >> derive_data_task >> notify_task
+    detect_new_files >> ingest_data_task >> clean_data_task >> derive_data_task >> notify_task'''
+
+"""
+AIRFLOW DAG that orchestrates the energy consumption pipeline:
+
+    1. Check for Excel files     -> ShortCircuitOperator
+    2. Parse Excel -> Parquet    -> ingest_data.py 
+    3. Bronze -> Silver          -> clean_data.py
+    4. Silver -> Gold            -> derive_data.py
+    5. Completion notification   -> notify.py
+"""
+
+import logging
+import os
+import glob
+import sys
+from datetime import datetime, timedelta
+
+from airflow import DAG
+from airflow.operators.python import PythonOperator, ShortCircuitOperator
+
+sys.path.insert(0, "/opt/airflow/scripts")
+
+import clean_data
+import derive_data
+import ingest_data
+import notify
+
+logger = logging.getLogger(__name__)
+
+INPUT_DIR = "/opt/airflow/data/input"
+
+
+def check_for_excel_files():
+    """
+    Check if any .xlsx files exist in the input directory.
+    Returns True to continue the pipeline, False to stop it cleanly.
+    """
+    files = glob.glob(os.path.join(INPUT_DIR, "*.xlsx"))
+
+    if not files:
+        print(f"No Excel files found in {INPUT_DIR} - stopping pipeline.")
+        return False
+
+    print(f"Found {len(files)} Excel file(s):")
+    for f in files:
+        print(f"  - {os.path.basename(f)}")
+    return True
+
+
+def notify_on_failure(context):
+    """
+    Called automatically by Airflow if any task in the DAG fails.
+    """
+    task_instance = context.get("task_instance")
+    exception = context.get("exception")
+    try:
+        notify.run(
+            status="FAILURE",
+            failed_task=task_instance.task_id if task_instance else "unknown",
+            error=str(exception) if exception else "unknown error",
+        )
+    except Exception:
+        logger.exception("notify_on_failure: failed to send failure notification")
+
+
+default_args = {
+    "owner": "data_engineering_team",
+    "retries": 2,
+    "retry_delay": timedelta(minutes=2),
+    "retry_exponential_backoff": True,
+    "max_retry_delay": timedelta(minutes=15),
+    "on_failure_callback": notify_on_failure,
+}
+
+
+with DAG(
+    dag_id="energy_pipeline_dag",
+    description="Centralize, normalize, and aggregate energy consumption data from Excel files",
+    default_args=default_args,
+    start_date=datetime(2025, 1, 1),
+    schedule_interval=timedelta(minutes=15),
+    catchup=False,
+    max_active_runs=1,
+    tags=["energy", "medallion", "duckdb", "minio"],
+) as dag:
+
+    # STAGE 1: Check for Excel files (replaces FileSensor)
+    check_files_task = ShortCircuitOperator(
+        task_id="check_for_excel_files",
+        python_callable=check_for_excel_files,
+    )
+
+    # STAGE 2: Parse Excel files -> Parquet (Bronze Zone)
+    ingest_data_task = PythonOperator(
+        task_id="parse_excel_to_bronze",
+        python_callable=ingest_data.run,
+    )
+
+    # STAGE 3: Bronze -> Silver Zone
+    clean_data_task = PythonOperator(
+        task_id="transform_to_silver_zone",
+        python_callable=clean_data.run,
+    )
+
+    # STAGE 4: Silver -> Gold Zone
+    derive_data_task = PythonOperator(
+        task_id="transform_to_gold_zone",
+        python_callable=derive_data.run,
+    )
+
+    # STAGE 5: Success notification
+    notify_task = PythonOperator(
+        task_id="send_completion_notification",
+        python_callable=lambda **context: notify.run(status="SUCCESS"),
+    )
+
+    # Pipeline order
+    check_files_task >> ingest_data_task >> clean_data_task >> derive_data_task >> notify_task

@@ -36,6 +36,7 @@ import openpyxl
 
 from minio_utils import get_s3_client, ensure_bucket_exists, upload_bytes, upload_file
 
+
 # Prefer the mounted project folder when running on the host, but keep the
 # container path for Airflow execution inside Docker.
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -44,9 +45,6 @@ CONTAINER_INPUT_DIR = "/opt/airflow/data/input"
 INPUT_DIR = DEFAULT_INPUT_DIR if os.path.isdir(DEFAULT_INPUT_DIR) else CONTAINER_INPUT_DIR
 
 BRONZE_BUCKET = os.environ.get("BUCKET_BRONZE") or "bronze"
-
-
-    
 
 def extract_sheet_metadata(worksheet):
     sheet_name = worksheet.title
@@ -87,8 +85,6 @@ def worksheet_to_dataframe(worksheet, header_row_index):
     Convert a worksheet into a pandas DataFrame, using the given row
     number as the header row, and everything below it as data.
 
-    We do this manually (instead of pd.read_excel) because the header
-    is not in row 1.
     """
     data_rows = []
     header_values = None
@@ -184,10 +180,22 @@ def process_excel_file(local_file_path, hall_id, hall_label, s3_client):
     parquet_keys = []
 
     for worksheet in workbook.worksheets:
-        if hall_id == "H1" or hall_id == "H5":
+        if hall_id == "H1":
+            # H1: column A of rows 1-3 has no metadata we need, safe to
+            # remove the ID column BEFORE extracting.
             worksheet.delete_cols(1)
+            meta = extract_sheet_metadata(worksheet)
+            
+        elif hall_id == "H5":
+            # H5: metadata (meter_id etc.) lives in column A of rows 1-3,
+            # so extract BEFORE removing the ID column.
+            meta = extract_sheet_metadata(worksheet)
+            worksheet.delete_cols(1)
+            
+        else:
+            # no ID column to remove at all
+            meta = extract_sheet_metadata(worksheet)
 
-        meta = extract_sheet_metadata(worksheet)
         safe_sheet_name = re.sub(r"[^A-Za-z0-9_]+", "_", meta["sheet_name"]).strip("_")
         station_id = f"{hall_id}_{safe_sheet_name}".lower()
 
