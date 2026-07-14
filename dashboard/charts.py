@@ -125,14 +125,14 @@ def fig_daily_peak(df: pd.DataFrame, top_n: int) -> go.Figure:
     return fig
 
 
-def fig_hall_drilldown(df: pd.DataFrame) -> go.Figure:
-    pivot = (df.pivot_table(index="hour_bucket", columns="station_name",
+'''def fig_hall_drilldown(df: pd.DataFrame) -> go.Figure:
+    pivot = (df.pivot_table(index="hour_bucket", columns="meter_name",
                             values="total_consumption", aggfunc="sum").fillna(0))
     fig = go.Figure()
-    for i, station in enumerate(pivot.columns):
+    for i, meter in enumerate(pivot.columns):
         fig.add_trace(go.Scatter(
-            x=pivot.index, y=pivot[station],
-            name=station, mode="lines+markers",
+            x=pivot.index, y=pivot[meter],
+            name=meter, mode="lines+markers",
             line=dict(color=BRAND_QUALITATIVE[i % len(BRAND_QUALITATIVE)], width=2),
             marker=dict(size=5),
         ))
@@ -142,18 +142,99 @@ def fig_hall_drilldown(df: pd.DataFrame) -> go.Figure:
         xaxis=dict(**GRID, tickangle=30),
         yaxis=dict(**GRID, title="Consumption (kW)"),
     )
+    return fig'''
+
+def fig_hall_drilldown(df: pd.DataFrame) -> go.Figure:
+    pivot = (df.pivot_table(index="bucket", columns="meter_name",
+                            values="total_consumption", aggfunc="sum").fillna(0))
+ 
+    # total per 15-min bucket, across all meters stacked - this is what
+    # actually crossed the threshold, not any single meter on its own
+    totals      = pivot.sum(axis=1)
+    peak_bucket = totals.idxmax()
+    peak_value  = totals.max()
+ 
+    fig = go.Figure()
+    for i, meter in enumerate(pivot.columns):
+        fig.add_trace(go.Bar(
+            x=pivot.index, y=pivot[meter], name=meter,
+            marker_color=BRAND_QUALITATIVE[i % len(BRAND_QUALITATIVE)],
+        ))
+ 
+    # threshold line at the peak level, same visual language as fig_overview
+    fig.add_hline(
+        y=peak_value, line_dash="dash", line_color=DANGER,
+        annotation_text=f"Peak = {peak_value:.1f} kW",
+        annotation_position="top right",
+        annotation_font_color=DANGER,
+    )
+ 
+    # call out which bucket the peak actually happened in
+    fig.add_annotation(
+        x=peak_bucket, y=peak_value, text="▲ Peak", showarrow=True,
+        arrowhead=2, arrowcolor=DANGER, ax=0, ay=-30,
+        font=dict(color=DANGER, size=11),
+    )
+ 
+    fig.update_layout(
+        **LIGHT, height=660, barmode="stack", margin=dict(l=0, r=0, t=10, b=0),
+        legend=dict(orientation="h", y=-0.3),
+        xaxis=dict(**GRID, title="Time", tickangle=30, tickformat="%d.%m.%Y %H:%M"),
+        yaxis=dict(**GRID, title="Consumption (kW)"),
+    )
     return fig
 
-def fig_station_drilldown(df: pd.DataFrame) -> go.Figure:
+def fig_peak_contributors(df: pd.DataFrame) -> go.Figure:
+    pivot  = (df.pivot_table(index="bucket", columns="meter_name",
+                             values="total_consumption", aggfunc="sum").fillna(0))
+    totals      = pivot.sum(axis=1)
+    peak_bucket = totals.idxmax()
+ 
+    buckets  = list(pivot.index)
+    peak_pos = buckets.index(peak_bucket)
+ 
+    if peak_pos == 0:
+        # no earlier interval in this window to compare against
+        delta          = pivot.loc[peak_bucket].sort_values(ascending=False)
+        baseline_label = "start of window"
+    else:
+        prev_bucket    = buckets[peak_pos - 1]
+        delta          = (pivot.loc[peak_bucket] - pivot.loc[prev_bucket]).sort_values(ascending=False)
+        baseline_label = pd.Timestamp(prev_bucket).strftime("%d.%m.%Y %H:%M")
+ 
+    peak_label = pd.Timestamp(peak_bucket).strftime("%d.%m.%Y %H:%M")
+    colors     = [DANGER if v > 0 else MID_GRAY for v in delta.values]
+ 
+    fig = go.Figure(go.Bar(
+        x=delta.values, y=delta.index, orientation="h",
+        marker_color=colors,
+        text=[f"{v:+.2f} kW" for v in delta.values],
+        textposition="outside",
+        cliponaxis=False,
+    ))
+    fig.add_vline(x=0, line_color=SILVER_BORDER)
+    fig.update_layout(
+        **LIGHT, height=max(240, 32 * len(delta)),
+        margin=dict(l=0, r=60, t=40, b=0),
+        title=dict(
+            text=f"Δ Consumption per meter: {baseline_label} → {peak_label} (peak)",
+            font=dict(size=13, color=DEEP_NAVY),
+        ),
+        xaxis=dict(**GRID, title="Change in consumption (kW)"),
+        yaxis=dict(autorange="reversed", title=None),
+    )
+    return fig
+
+def fig_meter_drilldown(df: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
 
-    for i, (station, sub) in enumerate(df.groupby("station_name")):
+    for i, (meter, sub) in enumerate(df.groupby("meter_name")):
         sub   = sub.sort_values("timestamp")
         color = BRAND_QUALITATIVE[i % len(BRAND_QUALITATIVE)]
 
         fig.add_trace(go.Scatter(
             x=sub["timestamp"], y=sub["consumption"],
-            name=station,
+            name=meter,
             mode="lines",
             line=dict(color=color, width=1.5),
         ))
@@ -168,16 +249,15 @@ def fig_station_drilldown(df: pd.DataFrame) -> go.Figure:
             x=[peak_row["timestamp"]],
             y=[peak_row["consumption"]],
             mode="markers",
-            name=f"{station} peak",
+            name=f"{meter} peak",
             marker=dict(color=DANGER, size=10, symbol="diamond",
                         line=dict(color="white", width=1)),
             
-            customdata=[[peak_row["consumption"], station, meter_id]],
+            customdata=[[peak_row["consumption"], meter]],
             hovertemplate=(
                 "<b>⚡ Peak</b><br>"
                 "Value:   <b>%{customdata[0]:.1f} kW</b><br>"
-                "Station: <b>%{customdata[1]}</b><br>"
-                "Meter:   <b>%{customdata[2]}</b><br>"
+                "Meter: <b>%{customdata[1]}</b><br>"
                 "Time:    %{x|%d.%m.%Y %H:%M}"
                 "<extra></extra>"   # hides the trace name box
             ),

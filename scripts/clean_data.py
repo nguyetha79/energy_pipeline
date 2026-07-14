@@ -1,8 +1,8 @@
 """
-  1. Reads all raw Parquet files (one per station/sheet) from the
+  1. Reads all raw Parquet files (one per meter/sheet) from the
      'raw' bucket using DuckDB.
   2. Renames columns into the unified schema described in the plan:
-       hall_id, station_id, timestamp, min, max, avg, src_file
+       hall_id, meter_id, timestamp, min, max, avg, src_file
   3. Converts the "Zeitbereich" timestamp column into a real UTC
      timestamp.
   4. Handles missing values by keeping rows with a valid timestamp,
@@ -38,7 +38,7 @@ def normalize_hall_dataframe(df):
     Take a raw DataFrame from the bronze layer and return
     a normalized DataFrame matching the unified schema:
 
-        hall_id, hall_name, meter_id, station_id, station_name, station_desc,
+        hall_id, hall_name, meter_id, meter_name, meter_desc,
         timestamp (UTC), min, max, avg, src_file
 
     Steps performed:
@@ -50,7 +50,7 @@ def normalize_hall_dataframe(df):
         this academic project; in a real company setting you would
         confirm the actual timezone with the source system).
       - Keep rows with a valid timestamp.
-      - Preserve meter_id and station_desc if present.
+      - Preserve meter_id and meter_desc if present.
       - Replace missing 'min'/'max'/'avg' values with 0.
     """
     df = df.copy()
@@ -104,8 +104,8 @@ def normalize_hall_dataframe(df):
 
     # Keep only the unified columns 
     final_cols = [
-        "hall_id", "hall_label", "meter_id", "station_id",
-        "station_name", "station_desc",
+        "hall_id", "hall_label", "meter_id",
+        "meter_name", "meter_desc",
         "timestamp", "min", "max", "avg",
         "interval_minutes", "src_file",
     ]
@@ -120,7 +120,7 @@ def run(**context):
     """
     Main entry point, called by the Airflow PythonOperator.
 
-    For each hall (hall_id), combine all of its raw station Parquet
+    For each hall (hall_id), combine all of its raw meter Parquet
     files into a single normalized Parquet file in the 'clean' bucket.
     """
     s3_client = get_s3_client()
@@ -143,7 +143,7 @@ def run(**context):
     written_keys = []
 
     for hall_id, keys in halls.items():
-        print(f"Cleaning hall {hall_id} ({len(keys)} station files)...")
+        print(f"Cleaning hall {hall_id} ({len(keys)} meter files)...")
 
         frames = []
         for key in keys:

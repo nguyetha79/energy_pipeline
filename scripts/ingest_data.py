@@ -2,7 +2,7 @@
   1. Reads every .xlsx file from the local 'data/input' folder.
   2. Uploads the ORIGINAL, untouched Excel file to the 'raw' bucket
      (so we always keep a copy of the source data).
-  3. Opens each worksheet (one worksheet = one measurement station)
+  3. Opens each worksheet (one worksheet = one measurement meter)
      using openpyxl, because the files have a non-standard layout:
 
         Row 1: "Export der Messwerte   16.09.2025 16:30:44"
@@ -16,7 +16,7 @@
      skip the metadata rows, and build a clean DataFrame ourselves.
 
   4. Saves each worksheet as its own Parquet file in the 'raw' bucket
-     (one Parquet file per station), keeping the data EXACTLY as
+     (one Parquet file per meter), keeping the data EXACTLY as
      extracted (no cleaning yet - that happens in transform_clean.py).
 
 WHY KEEP BOTH EXCEL AND PARQUET IN THE RAW ZONE?
@@ -51,11 +51,10 @@ def extract_sheet_metadata(worksheet):
 
     # Fallback parsing from row 2/3 if the cells are blank.
     row2_values = [cell.value for cell in worksheet[2]]
-    meter_id = str(int(row2_values[0])) if isinstance(row2_values[0], (int, float)) else None
-    
+
     row2_strings = [v for v in row2_values if isinstance(v, str) and v.strip()]
-    station_name = row2_strings[0] if row2_strings else sheet_name
-    station_desc = row2_strings[1] if len(row2_strings) >= 2 else ""
+    meter_name = row2_strings[0] if row2_strings else sheet_name
+    meter_desc = row2_strings[1] if len(row2_strings) >= 2 else ""
 
     row3_values = [cell.value for cell in worksheet[3]]
     row3_strings = [v for v in row3_values if isinstance(v, str) and v.strip()]
@@ -73,9 +72,8 @@ def extract_sheet_metadata(worksheet):
 
     return {
         "sheet_name": sheet_name,
-        "meter_id": meter_id,
-        "station_name": station_name,
-        "station_desc": station_desc,
+        "meter_name": meter_name,
+        "meter_desc": meter_desc,
         "interval_label": interval_label,
         "header_row_index": 4,
     }
@@ -167,7 +165,7 @@ def process_excel_file(local_file_path, hall_id, hall_label, s3_client):
       - upload the original file to raw/<hall_id>/<filename>.xlsx
       - for each worksheet, extract data + metadata
       - upload one Parquet file per worksheet to
-        raw/<hall_id>/<station_name_safe>.parquet
+        raw/<hall_id>/<meter_name_safe>.parquet
     """
     file_name = os.path.basename(local_file_path)
 
@@ -188,7 +186,7 @@ def process_excel_file(local_file_path, hall_id, hall_label, s3_client):
             meta = extract_sheet_metadata(worksheet)
             
         elif hall_id == "H5":
-            # H5: metadata (meter_id etc.) lives in column A of rows 1-3,
+            # H5: metadata lives in column A of rows 1-3,
             # so extract BEFORE removing the ID column.
             meta = extract_sheet_metadata(worksheet)
             worksheet.delete_cols(1)
@@ -198,7 +196,7 @@ def process_excel_file(local_file_path, hall_id, hall_label, s3_client):
             meta = extract_sheet_metadata(worksheet)
 
         safe_sheet_name = re.sub(r"[^A-Za-z0-9_]+", "_", meta["sheet_name"]).strip("_")
-        station_id = f"{hall_id}_{safe_sheet_name}".lower()
+        meter_id = f"{hall_id}_{safe_sheet_name}".lower()
 
         df = worksheet_to_dataframe(worksheet, meta["header_row_index"])
         df = normalize_dataframe(df)
@@ -211,10 +209,9 @@ def process_excel_file(local_file_path, hall_id, hall_label, s3_client):
         # This is important for traceability and for the next pipeline stages.
         df["hall_id"] = hall_id
         df["hall_label"] = hall_label
-        df["meter_id"] = meta.get("meter_id")
-        df["station_id"] = station_id
-        df["station_name"] = meta.get("station_name") or meta["sheet_name"]
-        df["station_desc"] = meta.get("station_desc") or ""
+        df["meter_id"] = meter_id
+        df["meter_name"] = meta.get("meter_name") or meta["sheet_name"]
+        df["meter_desc"] = meta.get("meter_desc") or ""
         df["interval_minutes"] = extract_interval_minutes(meta["interval_label"])
         df["src_file"] = file_name
 

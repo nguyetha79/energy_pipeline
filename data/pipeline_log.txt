@@ -12,3 +12,6 @@
 [2026-07-14T09:58:58.454961] Pipeline run FAILED (task: parse_excel_to_bronze) - {'DAG Id': 'energy_pipeline_dag', 'Task Id': 'parse_excel_to_bronze', 'Run Id': 'scheduled__2026-07-14T09:15:00+00:00', 'Hostname': 'f293ee458a90'}
 [2026-07-14T10:41:37.336762] Pipeline run FAILED (task: parse_excel_to_bronze) - {'DAG Id': 'energy_pipeline_dag', 'Task Id': 'parse_excel_to_bronze', 'Run Id': 'scheduled__2026-07-14T09:30:00+00:00', 'Hostname': 'f293ee458a90'}
 [2026-07-14T10:58:39.911192] Pipeline run FAILED (task: parse_excel_to_bronze) - {'DAG Id': 'energy_pipeline_dag', 'Task Id': 'parse_excel_to_bronze', 'Run Id': 'scheduled__2026-07-14T10:15:00+00:00', 'Hostname': 'f293ee458a90'}
+[2026-07-14T11:30:33.235485] Pipeline run FAILED (task: parse_excel_to_bronze) - {'DAG Id': 'energy_pipeline_dag', 'Task Id': 'parse_excel_to_bronze', 'Run Id': 'scheduled__2026-07-14T10:30:00+00:00', 'Hostname': 'f293ee458a90'}
+[2026-07-14T11:53:04.701005] Pipeline run FAILED (task: parse_excel_to_bronze) - {'DAG Id': 'energy_pipeline_dag', 'Task Id': 'parse_excel_to_bronze', 'Run Id': 'scheduled__2026-07-14T11:15:00+00:00', 'Hostname': '5a73f77ca0c1'}
+[2026-07-14T12:27:17.568883] Pipeline run FAILED (task: parse_excel_to_bronze) - Task received SIGTERM signal

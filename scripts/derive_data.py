@@ -6,7 +6,6 @@
   2. Builds fact & dim tables
     - fact_measurement
     - dim_hall
-    - dim_station
     - dim_meter
 
   3. Writes the results as Parquet files into the 'gold' bucket,
@@ -70,7 +69,6 @@ def run(**context):
         SELECT
             hall_id,
             meter_id,
-            station_id,
             timestamp,
             min,
             max,
@@ -87,28 +85,18 @@ def run(**context):
     """)
 
     con.execute("""
-        CREATE OR REPLACE TABLE dim_station AS
-        SELECT DISTINCT
-            hall_id,
-            station_id,
-            station_name,
-            station_desc
-        FROM total_energy_data
-    """)
-
-    con.execute("""
         CREATE OR REPLACE TABLE dim_meter AS
         SELECT DISTINCT
-            station_id,    
+            hall_id,
             meter_id,
-            interval_minutes
+            meter_name,
+            meter_desc
         FROM total_energy_data
     """)
 
     tables = [
         "fact_measurement",
         "dim_hall",
-        "dim_station",
         "dim_meter",
     ]
 

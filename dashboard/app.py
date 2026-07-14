@@ -6,8 +6,8 @@ WHAT THIS APP DOES:
   - Reads the GOLD ZONE Parquet files (aggregated, dashboard-ready data).
   - Lets the user:
       * pick a time grain (15min / hourly / daily)
-      * pick a level ( per hall / per station)
-      * filter by date range, hall, and station
+      * pick a level ( per hall / per meter)
+      * filter by date range, hall, and meter
   - Shows:
       * a time-series line chart of total energy consumption
       * markers highlighting detected PEAKS
@@ -30,11 +30,11 @@ from datetime import date, datetime
 
 from queries import (
     query_overview, query_by_hall, query_heatmap,
-    query_daily_peak, query_station_drilldown, query_hall_drilldown
+    query_daily_peak, query_meter_drilldown, query_hall_drilldown
 )
 from charts import (
     fig_overview, fig_by_hall, fig_heatmap,
-    fig_daily_peak, fig_station_drilldown, fig_hall_drilldown
+    fig_daily_peak, fig_meter_drilldown, fig_hall_drilldown, fig_peak_contributors
 )
 
 HALLS       = ["H1", "H2", "H3", "H4", "H5", "H6", "H7", "H8"]
@@ -95,7 +95,7 @@ with st.spinner("Loading from MinIO…"):
     df_daily    = query_daily_peak(start_str, end_str, selected_halls)
     df_hall     = query_hall_drilldown(drill_hall, peak_start, peak_end)
 
-# ── KPI cards ────────────────────────────────────────────────────
+# KPI cards 
 st.markdown("## ⚡ Energy Consumption Dashboard")
 
 total   = df_overview["total_consumption"].sum()
@@ -107,7 +107,7 @@ for col, label, value, unit in zip(
     st.columns(4),
     ["Total Consumption", "Absolute Peak", "P95 Threshold", "Intervals Above P95"],
     [f"{total:,.0f}", f"{peak:,.1f}", f"{p95:,.1f}", str(n_peaks)],
-    ["kWh", "kWh", "kWh", "intervals"],
+    ["kW", "kW", "kW", "intervals"],
 ):
     col.markdown(f"""
     <div class="metric-card">
@@ -135,9 +135,9 @@ st.plotly_chart(fig_daily_peak(df_daily, top_n), use_container_width=True)
 st.markdown("---")
 
 # initialize persistent storage once
-if "selected_station_ids" not in st.session_state:
-    st.session_state.selected_station_ids = []
-    st.session_state.selected_station_names = []
+if "selected_meter_ids" not in st.session_state:
+    st.session_state.selected_meter_ids = []
+    st.session_state.selected_meter_names = []
 
 st.markdown(f"### Hall Drill-Down - {drill_hall} · {peak_start} → {peak_end}")
 if df_hall.empty:
@@ -145,45 +145,48 @@ if df_hall.empty:
 else:
     st.plotly_chart(fig_hall_drilldown(df_hall), use_container_width=True)
 
-    station_totals = (
-        df_hall.groupby(["station_id", "station_name"])["total_consumption"]
+    st.markdown("### Which meter caused this peak?")
+    st.plotly_chart(fig_peak_contributors(df_hall), use_container_width=True)
+
+    meter_totals = (
+        df_hall.groupby(["meter_id", "meter_name"])["total_consumption"]
         .sum().sort_values(ascending=False).reset_index()
-        .rename(columns={"station_id": "ID", "total_consumption": "Total (kWh)", "station_name": "Station"})
+        .rename(columns={"meter_id": "ID", "total_consumption": "Total (kW)", "meter_name": "Meter"})
     )
 
     event = st.dataframe(
-        station_totals.drop(columns=["ID"]),
+        meter_totals.drop(columns=["ID"]),
         use_container_width=True,
         hide_index=True,
         on_select="rerun",
         selection_mode="multi-row",
-        key="station_table",
+        key="meter_table",
     )
 
     # always sync session_state to current selection — including when it's empty
     if event and event.selection:
         selected_rows = event.selection.rows
-        selected_df = station_totals.iloc[selected_rows]
-        st.session_state.selected_station_ids   = selected_df["ID"].tolist()
-        st.session_state.selected_station_names = selected_df["Station"].tolist()
+        selected_df = meter_totals.iloc[selected_rows]
+        st.session_state.selected_meter_ids   = selected_df["ID"].tolist()
+        st.session_state.selected_meter_names = selected_df["Meter"].tolist()
 
-    station_ids   = st.session_state.selected_station_ids
-    station_names = st.session_state.selected_station_names
+    meter_ids   = st.session_state.selected_meter_ids
+    meter_names = st.session_state.selected_meter_names
 
-    if station_ids:
+    if meter_ids:
         st.markdown("---")
-        st.markdown(f"### Station Drill-Down - Number of stations selected: {len(station_names)} · {peak_start} → {peak_end}")
-        st.caption(", ".join(station_names))
+        st.markdown(f"### Meter Drill-Down - Number of meters selected: {len(meter_names)} · {peak_start} → {peak_end}")
+        st.caption(", ".join(meter_names))
 
         ts_frames = []
-        for sid, sname in zip(station_ids, station_names):
-            df_ts = query_station_drilldown(sid, peak_start, peak_end)
+        for sid, sname in zip(meter_ids, meter_names):
+            df_ts = query_meter_drilldown(sid, peak_start, peak_end)
             if not df_ts.empty:
-                df_ts["station_name"] = sname
+                df_ts["meter_name"] = sname
                 ts_frames.append(df_ts)
 
         if not ts_frames:
-            st.warning("No data for the selected stations / time window.")
+            st.warning("No data for the selected meters / time window.")
         else:
             df_ts_combined = pd.concat(ts_frames, ignore_index=True)
-            st.plotly_chart(fig_station_drilldown(df_ts_combined), use_container_width=True)
+            st.plotly_chart(fig_meter_drilldown(df_ts_combined), use_container_width=True)

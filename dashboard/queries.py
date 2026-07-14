@@ -24,9 +24,9 @@ def get_con():
         )
     """)
     con.execute(f"""
-        CREATE OR REPLACE VIEW dim_station AS
+        CREATE OR REPLACE VIEW dim_meter AS
         SELECT * FROM read_parquet(
-            's3://{GOLD_BUCKET}/dim_station/**/*.parquet',
+            's3://{GOLD_BUCKET}/dim_meter/**/*.parquet',
             hive_partitioning = false, union_by_name = true
         )
     """)
@@ -109,27 +109,48 @@ def query_daily_peak(start, end, halls) -> pd.DataFrame:
     return df
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+'''@st.cache_data(ttl=300, show_spinner=False)
 def query_hall_drilldown(hall, peak_start, peak_end) -> pd.DataFrame:
     sql = """
         SELECT
-            f.station_id,
-            COALESCE(d.station_name, f.station_id) AS station_name,
+            f.meter_id,
+            COALESCE(d.meter_name, f.meter_id) AS meter_name,
             DATE_TRUNC('hour', f.timestamp)         AS hour_bucket,
             SUM(f.avg)                             AS total_consumption,
             MAX(f."max")                            AS peak_max
         FROM fact_measurement f
-        LEFT JOIN dim_station d ON f.station_id = d.station_id
+        LEFT JOIN dim_meter d ON f.meter_id = d.meter_id
         WHERE f.hall_id = ? AND f.avg > 0 AND f.timestamp BETWEEN ? AND ?
-        GROUP BY f.station_id, d.station_name, DATE_TRUNC('hour', f.timestamp)
-        ORDER BY hour_bucket, f.station_id
+        GROUP BY f.meter_id, d.meter_name, DATE_TRUNC('hour', f.timestamp)
+        ORDER BY hour_bucket, f.meter_id
     """
     df = get_con().execute(sql, [hall, peak_start, peak_end]).df()
     df["hour_bucket"] = pd.to_datetime(df["hour_bucket"]).astype(str)
-    return df
+    return df'''
 
 @st.cache_data(ttl=300, show_spinner=False)
-def query_station_drilldown(station_id: str, peak_start: str, peak_end: str) -> pd.DataFrame:
+def query_hall_drilldown(hall, peak_start, peak_end) -> pd.DataFrame:
+    sql = """
+        SELECT
+            f.meter_id,
+            COALESCE(d.meter_name, f.meter_id) AS meter_name,
+            DATE_TRUNC('minute', f.timestamp)  AS bucket,
+            SUM(f.avg)                         AS total_consumption,
+            MAX(f."max")                       AS peak_max
+        FROM fact_measurement f
+        LEFT JOIN dim_meter d ON f.meter_id = d.meter_id
+        WHERE f.hall_id = ? AND f.avg > 0 AND f.timestamp BETWEEN ? AND ?
+        GROUP BY f.meter_id, d.meter_name, DATE_TRUNC('minute', f.timestamp)
+        ORDER BY bucket, f.meter_id
+    """
+    df = get_con().execute(sql, [hall, peak_start, peak_end]).df()
+    df["bucket"] = pd.to_datetime(df["bucket"])
+    return df
+
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def query_meter_drilldown(meter_id: str, peak_start: str, peak_end: str) -> pd.DataFrame:
     sql = """
         SELECT
             DATE_TRUNC('minute', f.timestamp) AS timestamp,
@@ -137,12 +158,12 @@ def query_station_drilldown(station_id: str, peak_start: str, peak_end: str) -> 
             AVG(f.avg)   AS consumption,
             MAX(f."max") AS peak_max
         FROM fact_measurement f
-        WHERE f.station_id = ?
+        WHERE f.meter_id = ?
           AND f.avg > 0
           AND f.timestamp BETWEEN ? AND ?
         GROUP BY DATE_TRUNC('minute', f.timestamp), f.meter_id
         ORDER BY timestamp
     """
-    df = get_con().execute(sql, [station_id, peak_start, peak_end]).df()
+    df = get_con().execute(sql, [meter_id, peak_start, peak_end]).df()
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     return df
