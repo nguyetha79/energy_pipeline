@@ -194,7 +194,7 @@ default_args = {
     "retries": 2,
     "retry_delay": timedelta(minutes=2),
     "retry_exponential_backoff": True,
-    "max_retry_delay": timedelta(minutes=15),
+    "max_retry_delay": timedelta(hours=24),
     "on_failure_callback": notify_on_failure,
 }
 

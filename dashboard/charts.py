@@ -48,7 +48,7 @@ def fig_overview(df: pd.DataFrame) -> go.Figure:
     ))
     fig.add_hline(
         y=threshold, line_dash="dash", line_color=DEEP_NAVY,
-        annotation_text=f"P95 = {threshold:.1f} kWh",
+        annotation_text=f"P95 = {threshold:.1f} kW",
         annotation_position="top right",
         annotation_font_color=DEEP_NAVY,
     )
@@ -84,7 +84,7 @@ def fig_heatmap(df: pd.DataFrame) -> go.Figure:
             [0.5, BRAND_CYAN],
             [1.0, DEEP_NAVY],
         ],
-        colorbar=dict(title="kWh", outlinecolor=SILVER_BORDER),
+        colorbar=dict(title="kW", outlinecolor=SILVER_BORDER),
     ))
     fig.update_layout(**LIGHT, height=280, margin=dict(l=0, r=0, t=10, b=0),
                       xaxis_title="Hour of Day", yaxis_title="Hall")
@@ -118,9 +118,9 @@ def fig_daily_peak(df: pd.DataFrame, top_n: int) -> go.Figure:
     fig.update_layout(
         **LIGHT, height=360, barmode="stack", margin=dict(l=0, r=0, t=10, b=0),
         legend=dict(orientation="h", y=-0.2), xaxis=GRID,
-        yaxis=dict(**GRID, title="Consumption (kWh)"),
+        yaxis=dict(**GRID, title="Consumption (kW)"),
         yaxis2=dict(overlaying="y", side="right", showgrid=False,
-                    title="Peak (kWh)", tickfont=dict(color=DANGER)),
+                    title="Peak (kW)", tickfont=dict(color=DANGER)),
     )
     return fig
 
@@ -140,7 +140,7 @@ def fig_hall_drilldown(df: pd.DataFrame) -> go.Figure:
         **LIGHT, height=320, margin=dict(l=0, r=0, t=10, b=0),
         showlegend=False,
         xaxis=dict(**GRID, tickangle=30),
-        yaxis=dict(**GRID, title="Consumption (kWh)"),
+        yaxis=dict(**GRID, title="Consumption (kW)"),
     )
     return fig
 
@@ -175,7 +175,7 @@ def fig_station_drilldown(df: pd.DataFrame) -> go.Figure:
             customdata=[[peak_row["consumption"], station, meter_id]],
             hovertemplate=(
                 "<b>⚡ Peak</b><br>"
-                "Value:   <b>%{customdata[0]:.1f} kWh</b><br>"
+                "Value:   <b>%{customdata[0]:.1f} kW</b><br>"
                 "Station: <b>%{customdata[1]}</b><br>"
                 "Meter:   <b>%{customdata[2]}</b><br>"
                 "Time:    %{x|%d.%m.%Y %H:%M}"
@@ -189,7 +189,7 @@ def fig_station_drilldown(df: pd.DataFrame) -> go.Figure:
         showlegend=True,
         legend=dict(orientation="h", y=-0.2),
         xaxis=dict(**GRID, title="Time"),
-        yaxis=dict(**GRID, title="Consumption (kWh)"),
+        yaxis=dict(**GRID, title="Consumption (kW)"),
         hoverlabel=dict(
             bgcolor=WHITE,
             bordercolor=SILVER_BORDER,

@@ -60,6 +60,7 @@ def extract_sheet_metadata(worksheet):
     row3_values = [cell.value for cell in worksheet[3]]
     row3_strings = [v for v in row3_values if isinstance(v, str) and v.strip()]
 
+    # handle the case where the Excel file has "Zeitbereich" in row 3 but not in row 4 (H7 & H8)
     if any(v.strip().lower() == "zeitbereich" for v in row3_strings):
         worksheet["A4"].value = "Zeitbereich"
 
