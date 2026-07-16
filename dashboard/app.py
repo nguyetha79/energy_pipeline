@@ -30,11 +30,14 @@ from datetime import date, datetime
 
 from queries import (
     query_overview, query_by_hall, query_heatmap,
-    query_daily_peak, query_meter_drilldown, query_hall_drilldown
+    query_daily_peak, query_meter_drilldown, query_hall_drilldown,
+    query_h71_daily_totals, query_h71_top_day, query_h71_machine_breakdown,
+    query_h71_machine_timeseries, find_peak_interval
 )
 from charts import (
     fig_overview, fig_by_hall, fig_heatmap,
-    fig_daily_peak, fig_meter_drilldown, fig_hall_drilldown, fig_peak_contributors
+    fig_daily_peak, fig_meter_drilldown, fig_hall_drilldown, fig_peak_contributors,
+    fig_h71_daily_totals, fig_h71_machine_breakdown, fig_h71_machine_timeseries
 )
 
 HALLS       = ["H1", "H2", "H3", "H4", "H5", "H6", "H7", "H8"]
@@ -190,3 +193,62 @@ else:
         else:
             df_ts_combined = pd.concat(ts_frames, ignore_index=True)
             st.plotly_chart(fig_meter_drilldown(df_ts_combined), use_container_width=True)
+
+# H7 New dataset (H71) THREE-STEP DRILL-DOWN
+# Answers, end-to-end and automatically, for the fact_measurement_h71 gold
+# table: which day peaked -> which machine drove it -> which interval on
+# that machine peaked. No sidebar filters involved - this always looks at
+# the full year of H7 new data.
+st.markdown("---")
+st.markdown("## Hall 7 (New Dataset) - Peak Drill-Down (Day → Machine → Interval)")
+ 
+with st.spinner("Analyzing Hall 7…"):
+    df_h71_daily        = query_h71_daily_totals()
+    top_day, top_day_val = query_h71_top_day()
+    df_h71_machines      = query_h71_machine_breakdown(top_day)
+ 
+if df_h71_daily.empty or df_h71_machines.empty:
+    st.warning("No data found in fact_measurement_h71.")
+else:
+    top_machine_id, top_machine_name, top_machine_val = (
+        df_h71_machines.iloc[0]["meter_id"],
+        df_h71_machines.iloc[0]["meter_name"],
+        float(df_h71_machines.iloc[0]["total_consumption"]),
+    )
+ 
+    df_h71_ts = query_h71_machine_timeseries(top_day, top_machine_id)
+    peak_start, peak_end, peak_val = find_peak_interval(df_h71_ts)
+ 
+    top_day_fmt = pd.Timestamp(top_day).strftime("%d.%m.%Y")
+    interval_fmt = (
+        f"{peak_start.strftime('%H:%M')}–{peak_end.strftime('%H:%M')}"
+        if peak_start is not None else "—"
+    )
+ 
+    # KPI summary of the three answers
+    for col, label, value, sub in zip(
+        st.columns(3),
+        ["Peak Day", "Top Machine", "Peak Interval"],
+        [top_day_fmt, top_machine_name, interval_fmt],
+        [f"{top_day_val:,.1f} kW total", f"{top_machine_val:,.1f} kW that day", f"{peak_val:,.2f} kW" if peak_val else ""],
+    ):
+        col.markdown(f"""
+        <div class="metric-card">
+            <h3>{label}</h3>
+            <p>{value}<br><span style="font-size:13px;color:#8b949e">{sub}</span></p>
+        </div>""", unsafe_allow_html=True)
+ 
+    st.markdown("#### Daily total consumption across the year")
+    st.plotly_chart(fig_h71_daily_totals(df_h71_daily, top_day), use_container_width=True)
+ 
+    st.markdown(f"#### Per-machine breakdown on {top_day_fmt}")
+    st.plotly_chart(fig_h71_machine_breakdown(df_h71_machines), use_container_width=True)
+ 
+    st.markdown(f"#### {top_machine_name}: consumption on {top_day_fmt}")
+    if df_h71_ts.empty:
+        st.warning("No readings for this machine on the peak day.")
+    else:
+        st.plotly_chart(
+            fig_h71_machine_timeseries(df_h71_ts, peak_start, peak_end, peak_val),
+            use_container_width=True,
+        )
