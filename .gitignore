@@ -9,6 +9,8 @@ env/
 .env
 
 data/input/Export_Copilot_*.xlsx
+data/input/old/Export_Copilot_*.xlsx
+data/pipeline_log.txt
 
 .vscode/
 .idea/

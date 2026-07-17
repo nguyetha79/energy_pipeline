@@ -1,19 +1,14 @@
-'''"""
+"""
   1. Reads all raw Parquet files (one per meter/sheet) from the
      'raw' bucket using DuckDB.
   2. Renames columns into the unified schema described in the plan:
-       hall_id, meter_id, timestamp, min, max, avg, src_file
+       hall_id, meter_id, timestamp, value
   3. Converts the "Zeitbereich" timestamp column into a real UTC
      timestamp.
   4. Handles missing values by keeping rows with a valid timestamp,
      and replacing missing metric values (min/max/avg) with 0.
   5. Writes ONE combined Parquet file per hall into the 'clean' bucket,
      partitioned by hall_id.
-
-WHY DuckDB?
-  DuckDB can run SQL directly against Parquet files stored in MinIO
-  (via the httpfs extension) without needing a separate database
-  server. This keeps the architecture simple.
 """
 
 import os
@@ -32,186 +27,6 @@ from minio_utils import (
 
 BRONZE_BUCKET = os.environ.get("BUCKET_BRONZE", "bronze")
 SILVER_BUCKET = os.environ.get("BUCKET_SILVER", "silver")
-
-def normalize_hall_dataframe(df):
-    """
-    Take a raw DataFrame from the bronze layer and return
-    a normalized DataFrame matching the unified schema:
-
-        hall_id, hall_name, meter_id, meter_name, meter_desc,
-        timestamp (UTC), min, max, avg, src_file
-
-    Steps performed:
-      - Rename 'MIN' / 'MAX' / 'MAX (AVG)' columns to the
-        unified lowercase names.
-      - Parse the 'Zeitbereich' (date) column into a proper datetime
-        and treat it as UTC (the source files do not include timezone
-        info, so we assume the local export time represents UTC for
-        this academic project; in a real company setting you would
-        confirm the actual timezone with the source system).
-      - Keep rows with a valid timestamp.
-      - Preserve meter_id and meter_desc if present.
-      - Replace missing 'min'/'max'/'avg' values with 0.
-    """
-    df = df.copy()
-    
-    # Rename measurement columns to the unified schema
-    # The exact column names can vary slightly between files, so we
-    # search for the right column rather than assuming a fixed name.
-    rename_map = {}
-    for col in df.columns:
-        col_clean = str(col).strip().lower()
-        if col_clean == "min":
-            rename_map[col] = "min"
-        elif col_clean == "max":
-            rename_map[col] = "max"
-        elif col_clean in ("max (avg)", "avg", "max(avg)"):
-            rename_map[col] = "avg"
-        elif col_clean in ("zeitbereich", "timestamp", "timestamp_raw", "datetime", "date"):
-            rename_map[col] = "timestamp_raw"
-
-    df = df.rename(columns=rename_map)
-
-    if "timestamp_raw" not in df.columns:
-        timestamp_candidates = [
-            col for col in df.columns
-            if any(token in str(col).strip().lower() for token in ("zeit", "time", "date", "timestamp"))
-        ]
-        if timestamp_candidates:
-            df = df.rename(columns={timestamp_candidates[0]: "timestamp_raw"})
-        else:
-            df["timestamp_raw"] = pd.NaT
-
-    # Parse timestamp into UTC 
-    # dayfirst=True because the source format is DD.MM.YYYY (German format)
-    df["timestamp"] = pd.to_datetime(df["timestamp_raw"], dayfirst=True, errors="coerce", utc=True)
-
-    # Make sure numeric columns are actually numeric 
-    for col in ["min", "max", "avg"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-        else:
-            df[col] = pd.NA
-
-    # Keep rows with a valid timestamp, fill missing metrics with 0 
-    before = len(df)
-    df = df[df["timestamp"].notna()].copy()
-    for col in ["min", "max", "avg"]:
-        df[col] = df[col].fillna(0)
-    after = len(df)
-    if before != after:
-        print(f"  Dropped {before - after} rows with missing timestamp")
-
-    # Keep only the unified columns 
-    final_cols = [
-        "hall_id", "hall_label", "meter_id",
-        "meter_name", "meter_desc",
-        "timestamp", "min", "max", "avg",
-        "interval_minutes", "src_file",
-    ]
-    for col in final_cols:
-        if col not in df.columns:
-            df[col] = pd.NA
-
-    return df[final_cols]
-
-
-def run(**context):
-    """
-    Main entry point, called by the Airflow PythonOperator.
-
-    For each hall (hall_id), combine all of its raw meter Parquet
-    files into a single normalized Parquet file in the 'clean' bucket.
-    """
-    s3_client = get_s3_client()
-    ensure_bucket_exists(s3_client, BRONZE_BUCKET)
-    ensure_bucket_exists(s3_client, SILVER_BUCKET)
-
-    raw_keys = list_objects(s3_client, BRONZE_BUCKET)
-    parquet_keys = [k for k in raw_keys if k.endswith(".parquet")]
-
-    if not parquet_keys:
-        print("No bronze Parquet files found - nothing to clean.")
-        return []
-
-    # Group parquet keys by hall_id (the folder prefix, e.g. 'H1/...')
-    halls = {}
-    for key in parquet_keys:
-        hall_id = key.split("/")[0]
-        halls.setdefault(hall_id, []).append(key)
-
-    written_keys = []
-
-    for hall_id, keys in halls.items():
-        print(f"Cleaning hall {hall_id} ({len(keys)} meter files)...")
-
-        frames = []
-        for key in keys:
-            raw_bytes = download_bytes(s3_client, BRONZE_BUCKET, key)
-            df = pd.read_parquet(io.BytesIO(raw_bytes))
-            normalized = normalize_hall_dataframe(df)
-            frames.append(normalized)
-
-        hall_df = pd.concat(frames, ignore_index=True)
-
-        # Write the cleaned hall data as one Parquet file
-        buffer = io.BytesIO()
-        hall_df.to_parquet(buffer, index=False)
-        buffer.seek(0)
-
-        clean_key = f"{hall_id}/data.parquet"
-        upload_bytes(s3_client, SILVER_BUCKET, clean_key, buffer.read())
-        written_keys.append(clean_key)
-
-        print(f"  -> {clean_key} ({len(hall_df)} rows)")
-
-    print(f"Done. {len(written_keys)} clean files written.")
-    return written_keys
-
-
-if __name__ == "__main__":
-    run()'''
-
-"""
-  1. Reads all raw Parquet files (one per meter/sheet) from the
-     'raw' bucket using DuckDB.
-  2. Renames columns into the unified schema described in the plan:
-       hall_id, meter_id, timestamp, min, max, avg, src_file
-  3. Converts the "Zeitbereich" timestamp column into a real UTC
-     timestamp.
-  4. Handles missing values by keeping rows with a valid timestamp,
-     and replacing missing metric values (min/max/avg) with 0.
-  5. Writes ONE combined Parquet file per hall into the 'clean' bucket,
-     partitioned by hall_id.
-
-WHY DuckDB?
-  DuckDB can run SQL directly against Parquet files stored in MinIO
-  (via the httpfs extension) without needing a separate database
-  server. This keeps the architecture simple.
-"""
-
-import os
-import io
-import duckdb
-import pandas as pd
-
-from minio_utils import (
-    get_s3_client,
-    ensure_bucket_exists,
-    upload_bytes,
-    list_objects,
-    download_bytes,
-    get_duckdb_s3_setup_sql,
-)
-
-BRONZE_BUCKET = os.environ.get("BUCKET_BRONZE", "bronze")
-SILVER_BUCKET = os.environ.get("BUCKET_SILVER", "silver")
-
-# Halls whose export only contains a single "Wert" column instead of
-# separate MIN / MAX / MAX (AVG) columns. For these halls we treat
-# "Wert" as the "avg" value; min/max are left missing (and therefore
-# filled with 0 further down), since we have no real min/max reading.
-WERT_ONLY_HALLS = {"H71"}
 
 
 def normalize_hall_dataframe(df, hall_id=None):
@@ -220,27 +35,19 @@ def normalize_hall_dataframe(df, hall_id=None):
     a normalized DataFrame matching the unified schema:
 
         hall_id, hall_name, meter_id, meter_name, meter_desc,
-        timestamp (UTC), min, max, avg, src_file
+        timestamp (UTC), value, src_file
 
     Steps performed:
       - Rename 'MIN' / 'MAX' / 'MAX (AVG)' columns to the
         unified lowercase names.
-      - Special case: for halls in WERT_ONLY_HALLS (e.g. H71), the
-        source export only has 'Zeitbereich' + 'Wert' (no MIN/MAX/
-        MAX (AVG) columns), so 'Wert' is mapped to 'avg' instead.
       - Parse the 'Zeitbereich' (date) column into a proper datetime
-        and treat it as UTC (the source files do not include timezone
-        info, so we assume the local export time represents UTC for
-        this academic project; in a real company setting you would
-        confirm the actual timezone with the source system).
+        and treat it as UTC
       - Keep rows with a valid timestamp.
       - Preserve meter_id and meter_desc if present.
-      - Replace missing 'min'/'max'/'avg' values with 0.
+      - Replace missing value with 0.
     """
     df = df.copy()
     df["hall_id"] = hall_id
-
-    is_wert_only_hall = hall_id in WERT_ONLY_HALLS
 
     # Rename measurement columns to the unified schema
     # The exact column names can vary slightly between files, so we
@@ -248,22 +55,10 @@ def normalize_hall_dataframe(df, hall_id=None):
     rename_map = {}
     for col in df.columns:
         col_clean = str(col).strip().lower()
-        if col_clean == "min":
-            rename_map[col] = "min"
-        elif col_clean == "max":
-            rename_map[col] = "max"
-        elif col_clean in ("max (avg)", "avg", "max(avg)"):
-            rename_map[col] = "avg"
-        elif col_clean == "wert" and is_wert_only_hall:
-            # H71-style halls have no separate MIN/MAX/AVG columns,
-            # so use 'Wert' as the avg reading. NOTE: other halls
-            # also carry a redundant 'Wert' column alongside their
-            # real MIN/MAX/MAX (AVG) columns - we deliberately leave
-            # that column alone (and it gets dropped later) so it
-            # doesn't overwrite the real 'avg' from MAX (AVG).
-            rename_map[col] = "avg"
-        elif col_clean in ("zeitbereich", "timestamp", "timestamp_raw", "datetime", "date"):
+        if col_clean == "zeitbereich":
             rename_map[col] = "timestamp_raw"
+        elif col_clean == "wert":
+            rename_map[col] = "value"
 
     df = df.rename(columns=rename_map)
 
@@ -281,22 +76,9 @@ def normalize_hall_dataframe(df, hall_id=None):
     # dayfirst=True because the source format is DD.MM.YYYY (German format)
     df["timestamp"] = pd.to_datetime(df["timestamp_raw"], dayfirst=True, errors="coerce", utc=True)
 
-    # Make sure numeric columns are actually numeric 
-    for col in ["min", "max", "avg"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-        else:
-            df[col] = pd.NA
-
     # Keep rows with a valid timestamp, fill missing metrics with 0 
     before = len(df)
     df = df[df["timestamp"].notna()].copy()
-    # For Wert-only halls (e.g. H71) there is no real min/max data at
-    # all, so we leave those columns as true nulls instead of
-    # fabricating 0s. Only 'avg' (from 'Wert') gets filled.
-    cols_to_fill = ["avg"] if is_wert_only_hall else ["min", "max", "avg"]
-    for col in cols_to_fill:
-        df[col] = df[col].fillna(0)
     after = len(df)
     if before != after:
         print(f"  Dropped {before - after} rows with missing timestamp")
@@ -305,7 +87,7 @@ def normalize_hall_dataframe(df, hall_id=None):
     final_cols = [
         "hall_id", "hall_label", "meter_id",
         "meter_name", "meter_desc",
-        "timestamp", "min", "max", "avg",
+        "timestamp", "value",
         "interval_minutes", "src_file",
     ]
     for col in final_cols:
@@ -333,7 +115,7 @@ def run(**context):
         print("No bronze Parquet files found - nothing to clean.")
         return []
 
-    # Group parquet keys by hall_id (the folder prefix, e.g. 'H1/...')
+    # Group parquet keys by hall_id (the folder prefix, e.g. 'H01/...')
     halls = {}
     for key in parquet_keys:
         hall_id = key.split("/")[0]

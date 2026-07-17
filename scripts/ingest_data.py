@@ -8,7 +8,7 @@
         Row 1: "Export der Messwerte   16.09.2025 16:30:44"
         Row 2: "570   Z 1130 Lade...    Ladesäulen Fremdfahrzeuge P1"
         Row 3: "Zeitbereich   Wirkleistung Summe L1..L3 [15m]"
-        Row 4: "ID (Entfernen) Zeitbereich  Wert  MIN  MAX  MAX(AVG)"   <- real header
+        Row 4: "Zeitbereich  Wert"   <- real header
         Row 5+: actual data rows
 
      pandas.read_excel() cannot handle this because it expects the
@@ -17,13 +17,7 @@
 
   4. Saves each worksheet as its own Parquet file in the 'raw' bucket
      (one Parquet file per meter), keeping the data EXACTLY as
-     extracted (no cleaning yet - that happens in transform_clean.py).
-
-WHY KEEP BOTH EXCEL AND PARQUET IN THE RAW ZONE?
-  - The Excel file is the "source of truth" - if something goes wrong
-    later, we can always re-process from here.
-  - The Parquet version is just a faster, structured copy of the same
-    data, used as input for the next pipeline stage.
+     extracted.
 """
 
 import os
@@ -179,6 +173,7 @@ def process_excel_file(local_file_path, hall_id, hall_label, s3_client):
     parquet_keys = []
 
     for worksheet in workbook.worksheets:
+        '''
         if hall_id == "H1":
             # H1: column A of rows 1-3 has no metadata we need, safe to
             # remove the ID column BEFORE extracting.
@@ -194,7 +189,9 @@ def process_excel_file(local_file_path, hall_id, hall_label, s3_client):
         else:
             # no ID column to remove at all
             meta = extract_sheet_metadata(worksheet)
+            '''
 
+        meta = extract_sheet_metadata(worksheet)
         safe_sheet_name = re.sub(r"[^A-Za-z0-9_]+", "_", meta["sheet_name"]).strip("_")
         meter_id = f"{hall_id}_{safe_sheet_name}".lower()
 
@@ -257,7 +254,7 @@ def run(**context):
         local_path = os.path.join(INPUT_DIR, file_name)
 
         # Derive a hall_id from the filename, e.g. "Export_Copilot_H1_....xlsx" -> "H1"
-        match = re.search(r"(H\d+)", file_name)
+        match = re.search(r"(H\d+|NVP)", file_name)
         hall_id = match.group(1) if match else os.path.splitext(file_name)[0]
         hall_label = f"Hall {hall_id}"
 
@@ -270,5 +267,4 @@ def run(**context):
 
 
 if __name__ == "__main__":
-    # Allows running this script directly for testing:
     run()

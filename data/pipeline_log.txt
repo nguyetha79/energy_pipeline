@@ -27,3 +27,8 @@
 [2026-07-16T20:46:33.098009] Pipeline run FAILED (task: parse_excel_to_bronze) - {'DAG Id': 'energy_pipeline_dag', 'Task Id': 'parse_excel_to_bronze', 'Run Id': 'scheduled__2026-07-16T20:00:00+00:00', 'Hostname': '88881a827919'}
 [2026-07-16T21:24:43.386650] Pipeline run FAILED (task: parse_excel_to_bronze) - {'DAG Id': 'energy_pipeline_dag', 'Task Id': 'parse_excel_to_bronze', 'Run Id': 'scheduled__2026-07-16T20:30:00+00:00', 'Hostname': '74b19ac239bf'}
 [2026-07-16T21:24:43.396894] Pipeline run FAILED (task: parse_excel_to_bronze) - {'DAG Id': 'energy_pipeline_dag', 'Task Id': 'parse_excel_to_bronze', 'Run Id': 'scheduled__2026-07-16T20:30:00+00:00', 'Hostname': '74b19ac239bf'}
+[2026-07-17T10:29:25.236048] Pipeline run FAILED (task: transform_to_gold_zone) - {'DAG Id': 'energy_pipeline_dag', 'Task Id': 'transform_to_gold_zone', 'Run Id': 'scheduled__2026-07-16T21:00:00+00:00', 'Hostname': 'ae41172b349a'}
+[2026-07-17T10:44:31.762913] Pipeline run FAILED (task: transform_to_gold_zone) - {'DAG Id': 'energy_pipeline_dag', 'Task Id': 'transform_to_gold_zone', 'Run Id': 'scheduled__2026-07-17T10:00:00+00:00', 'Hostname': 'ae41172b349a'}
+[2026-07-17T10:56:19.822378] Pipeline run FAILED (task: transform_to_silver_zone) - 'min'
+[2026-07-17T11:13:08.792689] Pipeline run FAILED (task: transform_to_silver_zone) - 'min'
+[2026-07-17T17:16:49.796950] Pipeline run FAILED (task: transform_to_gold_zone) - {'DAG Id': 'energy_pipeline_dag', 'Task Id': 'transform_to_gold_zone', 'Run Id': 'scheduled__2026-07-17T10:45:00+00:00', 'Hostname': '84b20935cc29'}
