@@ -204,13 +204,14 @@ with DAG(
     description="Centralize, normalize, and aggregate energy consumption data from Excel files",
     default_args=default_args,
     start_date=datetime(2025, 1, 1),
-    schedule_interval=timedelta(minutes=15),
+    # schedule_interval=timedelta(hours=24),
+    schedule=None, # manually triggered for now
     catchup=False,
     max_active_runs=1,
     tags=["energy", "medallion", "duckdb", "minio"],
 ) as dag:
 
-    # STAGE 1: Check for Excel files (replaces FileSensor)
+    # STAGE 1: Check for Excel files
     check_files_task = ShortCircuitOperator(
         task_id="check_for_excel_files",
         python_callable=check_for_excel_files,
