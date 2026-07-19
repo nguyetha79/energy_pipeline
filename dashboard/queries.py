@@ -31,16 +31,22 @@ def get_con():
             hive_partitioning = false, union_by_name = true
         )
     """)
+
+    con.execute(f"""
+        CREATE OR REPLACE VIEW dim_hall AS
+        SELECT * FROM read_parquet(
+            's3://{GOLD_BUCKET}/dim_hall/**/*.parquet',
+            hive_partitioning = false, union_by_name = true
+        )
+    """)
     return con
 
 
 @st.cache_data(ttl=300, show_spinner=False)
 def query_halls() -> list[str]:
-    """Distinct hall_id values actually present in the gold table, so the
-    dropdown always matches real data instead of a hardcoded guess."""
     sql = """
         SELECT DISTINCT hall_id
-        FROM fact_measurement
+        FROM dim_hall
         WHERE hall_id IS NOT NULL
         ORDER BY hall_id
     """
